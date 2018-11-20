@@ -30,7 +30,6 @@ type MetadataArry struct {
 }
 
 var (
-	//path = "/tmp/git-resource-request/"
 	sshKeyPath = "/root/.ssh/"
 )
 
@@ -84,7 +83,7 @@ func Init(url, branch, privateSshKey, path string) {
 	}
 
 	if exists(path + "/.git") {
-		updateRepo(path, branch)
+		updateRepo(path)
 	} else {
 		getRepo(url, branch, path)
 	}
@@ -107,52 +106,32 @@ func getRepo(url, branch, path string) {
 
 }
 
-func LastCommit(path string)([]map[string]string) {
+func LastCommit(path, branch string) []map[string]string {
 	if path == "" {
 		path = "/tmp/git-resource-request/"
 	}
-	allCommit := getLog(path)
-	for i, c := range allCommit {
-		if i == 0 {
-			var lastCommit []map[string]string
-			lastCommit = append(lastCommit, c)
-			return lastCommit
-		}
-	}
-	return nil
-}
-
-func getLog(path string) ([]map[string]string) {
 	repo, err := git.OpenRepository(path)
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	odb, err := repo.Odb()
+	remoteBranch, err := repo.References.Lookup("refs/remotes/origin/" + branch)
+	if err != nil {
+		log.Fatal(err)
+	}
+	commit, err := repo.LookupCommit(remoteBranch.Target())
 	if err != nil {
 		log.Fatal(err)
 	}
 	var result []map[string]string
 
-	odb.ForEach(func(oid *git.Oid) error {
-
-		obj, err := repo.Lookup(oid)
-		if err != nil {
-			log.Fatal(err)
-		}
-		commit := obj.Id().String()
-
-		c := make(map[string]string)
-		c["ref"] = commit
-		result = append(result, c)
-
-		return nil
-	})
+	c := make(map[string]string)
+	c["ref"] = commit.Id().String()
+	result = append(result, c)
 
 	return result
 }
 
-func updateRepo(path, branch string){
+func updateRepo(path string){
 	FetchOptions := &git.FetchOptions{
 		RemoteCallbacks: git.RemoteCallbacks{
 			CredentialsCallback:      credentialsCallback,
@@ -174,8 +153,6 @@ func updateRepo(path, branch string){
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	checkoutBranch(repo, branch)
 }
 
 func CheckoutCommit(commit, path string){
@@ -192,34 +169,6 @@ func CheckoutCommit(commit, path string){
 	repo.SetHeadDetached(oid)
 	repo.CheckoutHead(&git.CheckoutOpts{Strategy: git.CheckoutForce})
 
-}
-
-func checkoutBranch(repo *git.Repository, branch string) error {
-	remoteBranch, err := repo.References.Lookup("refs/remotes/origin/" + branch)
-	if err != nil {
-		return err
-	}
-
-	localCommit, err := repo.LookupCommit(remoteBranch.Target())
-	if err != nil {
-		return err
-	}
-	tree, err := repo.LookupTree(localCommit.TreeId())
-	if err != nil {
-		return err
-	}
-	checkoutOpts := &git.CheckoutOpts{
-		Strategy: git.CheckoutSafe | git.CheckoutRecreateMissing | git.CheckoutAllowConflicts | git.CheckoutUseTheirs,
-	}
-
-	err = repo.CheckoutTree(tree, checkoutOpts)
-	if err != nil {
-		return err
-	}
-
-	repo.SetHead("refs/heads/" + branch)
-
-	return nil
 }
 
 func GetMetaData(ref, br, path string)[]map[string]string  {
@@ -252,7 +201,7 @@ func GetMetaData(ref, br, path string)[]map[string]string  {
 			branch["name"] = "branch"
 			message["value"] = commit.Message()
 			message["name"] = "message"
-			result = append(result, message)
+			result = append(result, message, branch)
 		}
 		return nil
 	})

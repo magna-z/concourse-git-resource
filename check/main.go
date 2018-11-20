@@ -17,7 +17,7 @@ func main() {
 
 	controller.Init(input.Source.Url, input.Source.Branch, input.Source.PrivateKey, "")
 
-	err = json.NewEncoder(os.Stdout).Encode(controller.LastCommit(""))
+	err = json.NewEncoder(os.Stdout).Encode(controller.LastCommit("", input.Source.Branch))
 	if err != nil {
 		log.Fatalln(err)
 	}

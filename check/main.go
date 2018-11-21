@@ -17,8 +17,15 @@ func main() {
 
 	controller.Init(input.Source.Url, input.Source.Branch, input.Source.PrivateKey, "")
 
-	err = json.NewEncoder(os.Stdout).Encode(controller.LastCommit("", input.Source.Branch))
-	if err != nil {
-		log.Fatalln(err)
+	if input.Source.TagFilter != "" {
+		err = json.NewEncoder(os.Stdout).Encode(controller.LastTag(""))
+		if err != nil {
+			log.Fatalln(err)
+		}
+	} else {
+		err = json.NewEncoder(os.Stdout).Encode(controller.LastCommit("", input.Source.Branch))
+		if err != nil {
+			log.Fatalln(err)
+		}
 	}
 }

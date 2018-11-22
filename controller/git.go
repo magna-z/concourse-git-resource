@@ -7,8 +7,9 @@ import (
 	"io/ioutil"
 	"os/exec"
 	"io"
-	"strings"
 	"regexp"
+	"sort"
+	"strings"
 )
 
 type Payload struct {
@@ -24,12 +25,31 @@ type Source struct {
 	Url    string `json:"url"`
 	Branch string `json:"branch"`
 	TagFilter string `json:"tag_filter"`
+	PathSearch string `json:"path_search"`
 	PrivateKey string `json:"private_key"`
 }
 
-type MetadataArry struct {
+type MetadataJson struct {
 	Version Ref `json:"version"`
 	Metadata []map[string]string `json:"metadata"`
+}
+
+type Tag struct {
+	Name string
+	Commit string
+	When int64
+}
+
+type RefResult []map[string]string
+
+type MetadataResult []Metadata
+
+type Metadata struct {
+	commit string
+	author string
+	date string
+	commiter string
+	message string
 }
 
 var (
@@ -103,10 +123,7 @@ func getRepo(url, branch, path string) {
 	}
 }
 
-func LastCommit(path, branch string) []map[string]string {
-	if path == "" {
-		path = "/tmp/git-resource-request/"
-	}
+func LastCommit(path, branch string) RefResult {
 	repo, err := git.OpenRepository(path)
 	if err != nil {
 		log.Fatal(err)
@@ -119,11 +136,11 @@ func LastCommit(path, branch string) []map[string]string {
 	if err != nil {
 		log.Fatal(err)
 	}
-	var result []map[string]string
-
+	var result RefResult
 	c := make(map[string]string)
 	c["ref"] = commit.Id().String()
 	result = append(result, c)
+	defer repo.Free()
 	return result
 }
 
@@ -148,119 +165,135 @@ func updateRepo(path string){
 	}
 }
 
-func tagResolv(repo *git.Repository, tag string) string {
-	if tag != "" {
-		var actualNames string
-		var actualOid string
-		repo.Tags.Foreach(func(name string, id *git.Oid) error {
-			actualNames = name
-			actualOid = id.String()
-			return nil
-		})
-		re := regexp.MustCompile(tag)
-		if re.MatchString(actualNames) {
-			commit := actualOid
-			return commit
-		}
-	}
-	return ""
-}
-
-func CheckoutCommit(commit, tagFilter, path string){
+func GetMetaData(ref, path string) []map[string]string {
 	repo, err := git.OpenRepository(path)
 	if err != nil {
 		log.Fatal(err)
 	}
-	if tagFilter != "" {
-		var actualNames string
-		var actualOid string
-		repo.Tags.Foreach(func(name string, id *git.Oid) error {
-			actualNames = name
-			actualOid = id.String()
-			return nil
-		})
-		re := regexp.MustCompile(tagFilter)
-		if re.MatchString(actualNames) {
-			commit = actualOid
-		}
+	var oid *git.Oid
+	obj, _ := repo.References.Lookup("refs/tags/" + ref)
+	if obj != nil {
+		oid = obj.Target()
+	} else {
+		oid, _ = git.NewOid(ref)
 	}
-	oid, err := git.NewOid(commit)
-	if err != nil {
-		log.Fatal(err)
-	}
-	repo.SetHeadDetached(oid)
-	repo.CheckoutHead(&git.CheckoutOpts{Strategy: git.CheckoutForce})
-}
 
-func GetMetaData(ref, tagFilter, br, path string)[]map[string]string  {
-	repo, err := git.OpenRepository(path)
-	if err != nil {
-		log.Fatal(err)
-	}
-	if tagFilter != "" {
-		var actualNames string
-		var actualOid string
-		repo.Tags.Foreach(func(name string, id *git.Oid) error {
-			actualNames = name
-			actualOid = id.String()
-			return nil
-		})
-		re := regexp.MustCompile(tagFilter)
-		if re.MatchString(actualNames) {
-			ref = actualOid
-		}
-	}
-	odb, err := repo.Odb()
-	if err != nil {
-		log.Fatal(err)
-	}
+	o, err := repo.LookupCommit(oid)
 	var result []map[string]string
-	odb.ForEach(func(oid *git.Oid) error {
-		obj, err := repo.Lookup(oid)
+
+	commit := make(map[string]string)
+	commit["name"] = "commit"
+	commit["value"] = o.Id().String()
+
+	author := make(map[string]string)
+	author["name"] =  "author"
+	author["value"] = o.Committer().Name
+
+	whenCommit := make(map[string]string)
+	whenCommit["name"] = "date"
+	whenCommit["value"] = o.Committer().When.String()
+
+	branch := make(map[string]string)
+	branch["name"] = "branch"
+	branch["value"] = ""
+
+	tag := make(map[string]string)
+	tag["name"] = "tag"
+	tag["value"] = ""
+
+	message := make(map[string]string)
+	message["name"] = "message"
+	message["value"] = o.Message()
+
+
+
+	result = append(result, commit, author, whenCommit, branch, tag, message)
+	defer repo.Free()
+	return result
+}
+
+func tagWhen(repo *git.Repository, oid *git.Oid)int64 {
+	obj, err := repo.Lookup(oid)
+	if err != nil {
+		log.Fatal(err)
+	}
+	if obj.Type() == git.ObjectTag {
+		o, err := repo.LookupTag(oid)
 		if err != nil {
 			log.Fatal(err)
 		}
-		if ref == obj.Id().String() {
-			commit, err := obj.AsCommit()
-			if err != nil {
-				log.Fatal(err)
-			}
-			message := make(map[string]string)
-			branch := make(map[string]string)
-			committer := make(map[string]string)
-			committer["value"] = commit.Committer().Name
-			committer["name"] = "committer"
-			branch["value"] = br
-			branch["name"] = "branch"
-			message["value"] = commit.Message()
-			message["name"] = "message"
-			result = append(result, message, branch, committer)
+		return o.Tagger().When.Unix()
+	}
+	if obj.Type() == git.ObjectCommit {
+		o, err := repo.LookupCommit(oid)
+		if err != nil {
+			log.Fatal(err)
 		}
-		return nil
-	})
-	return result
+		return o.Committer().When.Unix()
+	}
+	return 0
 }
 
-func LastTag(path string) []map[string]string {
-	if path == "" {
-		path = "/tmp/git-resource-request/"
-	}
+func listTag(path, tagFilter string) []Tag {
 	repo, err := git.OpenRepository(path)
 	if err != nil {
 		log.Fatal(err)
 	}
-	var actualNames string
-	err = repo.Tags.Foreach(func(name string, oid *git.Oid) error {
-		actualNames = name
+	var result []Tag
+	err = repo.Tags.Foreach(func(name string, id *git.Oid) error {
+		t := Tag{Name:name, Commit:id.String(), When: tagWhen(repo, id)}
+		re := regexp.MustCompile(tagFilter)
+
+		if re.MatchString(name) {
+			result = append(result, t)
+		}
 		return nil
 	})
-	if err != nil {
-		log.Println(err)
-	}
-	t := strings.Trim(actualNames, "[]")
-	var result []map[string]string
-	c := make(map[string]string)
-	c["ref"] = strings.Trim(t, "refs/tags/")
-	result = append(result, c)
+	defer repo.Free()
 	return result
+
+}
+
+func lastTags(listTag []Tag) RefResult {
+	sort.Slice(listTag, func(i, j int) bool {
+		if listTag[i].When < listTag[j].When {
+			return true
+		}
+		if listTag[i].When > listTag[j].When {
+			return false
+		}
+		return listTag[i].When < listTag[j].When
+	})
+
+	lt := listTag[len(listTag)-1]
+
+	lastTag := make(map[string]string)
+	lastTag["ref"]= strings.Trim(lt.Name, "refs/tags/")
+	var result RefResult
+	result = append(result, lastTag)
+	return result
+}
+
+func LastTag(path, tagFilter string)RefResult  {
+	list := listTag(path, tagFilter)
+	lastTag := lastTags(list)
+	return lastTag
+}
+
+func Checkout(path, ref string) {
+	repo, err := git.OpenRepository(path)
+	if err != nil {
+		log.Fatal(err)
+	}
+	var oid *git.Oid
+	obj, _ := repo.References.Lookup("refs/tags/"+ref)
+	if obj != nil {
+		oid = obj.Target()
+	} else {
+		oid, _ = git.NewOid(ref)
+	}
+	repo.SetHeadDetached(oid)
+	repo.CheckoutHead(&git.CheckoutOpts{Strategy: git.CheckoutForce})
+	defer repo.Free()
+
 }

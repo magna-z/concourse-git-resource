@@ -1,6 +1,6 @@
 package controller
 
-func Check(branch, tagFilter, path string) RefResult {
+func Check(branch, tagFilter, pathSearech, ref, path string) RefResult {
 	if branch == "" {
 		branch = "master"
 	}
@@ -9,6 +9,9 @@ func Check(branch, tagFilter, path string) RefResult {
 	}
 	if tagFilter != "" {
 		return LastTag(path, tagFilter)
+	}
+	if pathSearech != "" {
+		return CheckPaths(path, branch, ref, pathSearech)
 	} else {
 		return LastCommit(path, branch)
 	}

@@ -297,3 +297,96 @@ func Checkout(path, ref string) {
 	defer repo.Free()
 
 }
+
+func lookupCommit(repo *git.Repository, ref string) *git.Tree  {
+	oid, err := git.NewOid(ref)
+	if err != nil {
+		log.Fatal(err)
+	}
+	obj, err := repo.LookupCommit(oid)
+	if err != nil {
+		log.Fatal(err)
+	}
+	tree, err := repo.LookupTree(obj.TreeId())
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer tree.Free()
+	return tree
+}
+
+func diff(path, branch, ref string) []string  {
+	repo, err := git.OpenRepository(path)
+	if err != nil {
+		log.Fatal(err)
+	}
+	localBranch, err := repo.LookupBranch("origin/"+branch, git.BranchRemote)
+	if err != nil {
+		log.Fatal(err)
+	}
+	commit, err := repo.LookupCommit(localBranch.Target())
+	if err != nil {
+		log.Fatal(err)
+	}
+	originalTree, err := repo.LookupTree(commit.TreeId())
+	if err != nil {
+		log.Fatal(err)
+	}
+	var newTree *git.Tree
+	if ref == "" {
+		newTree, err = repo.LookupTree(commit.TreeId())
+	} else {
+		newTree = lookupCommit(repo, ref)
+	}
+	callbackInvoked := false
+	opts := git.DiffOptions{
+		NotifyCallback: func(diffSoFar *git.Diff, delta git.DiffDelta, matchedPathSpec string) error {
+			callbackInvoked = true
+			return nil
+		},
+	}
+	diff, err := repo.DiffTreeToTree(originalTree, newTree, &opts)
+	if err != nil {
+		log.Fatal(err)
+	}
+	files := make([]string, 0)
+	hunks := make([]git.DiffHunk, 0)
+	lines := make([]git.DiffLine, 0)
+	patches := make([]string, 0)
+	err = diff.ForEach(func(file git.DiffDelta, progress float64) (git.DiffForEachHunkCallback, error) {
+		patch, err := diff.Patch(len(patches))
+		if err != nil {
+			return nil, err
+		}
+		defer patch.Free()
+		patchStr, err := patch.String()
+		if err != nil {
+			return nil, err
+		}
+		patches = append(patches, patchStr)
+		files = append(files, file.OldFile.Path)
+		return func(hunk git.DiffHunk) (git.DiffForEachLineCallback, error) {
+			hunks = append(hunks, hunk)
+			return func(line git.DiffLine) error {
+				lines = append(lines, line)
+				return nil
+			}, nil
+		}, nil
+	}, git.DiffDetailLines)
+	defer repo.Free()
+	return files
+}
+
+func CheckPaths(path, branch, ref, pathSearech string) RefResult {
+	re := regexp.MustCompile(pathSearech)
+	for _, pf := range diff(path, branch, ref){
+		if re.MatchString(pf) {
+			commit := make(map[string]string)
+			commit["ref"]= ref
+			var result RefResult
+			result = append(result, commit)
+			return result
+		}
+	}
+	return nil
+}

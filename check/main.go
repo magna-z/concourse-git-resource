@@ -17,7 +17,7 @@ func main() {
 
 	controller.Init(input.Source.Url, input.Source.Branch, input.Source.PrivateKey, "")
 
-	err = json.NewEncoder(os.Stdout).Encode(controller.Check(input.Source.Branch, input.Source.TagFilter, ""))
+	err = json.NewEncoder(os.Stdout).Encode(controller.Check(input.Source.Branch, input.Source.TagFilter, input.Source.PathSearch, input.Version.Ref, ""))
 	if err != nil {
 		log.Fatalln(err)
 	}

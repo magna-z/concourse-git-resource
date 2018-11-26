@@ -2,14 +2,14 @@ package main
 
 import (
 	"encoding/json"
-	"os"
-	log "github.com/sirupsen/logrus"
-	"github.com/devinotelecom/concourse-git-resource/controller"
 	"fmt"
+	"github.com/devinotelecom/concourse-git-resource/controller"
+	log "github.com/sirupsen/logrus"
+	"os"
 	"strings"
 )
 
-func main()  {
+func main() {
 	var input controller.Payload
 
 	path := strings.Trim(fmt.Sprint(os.Args[1:]), "[]")
@@ -19,7 +19,7 @@ func main()  {
 		log.Fatalln(err)
 	}
 
-	controller.Init(input.Source.Url, input.Source.Branch, input.Source.PrivateKey, path)
+	controller.Init(input, path)
 
 	controller.Checkout(path, input.Version.Ref)
 

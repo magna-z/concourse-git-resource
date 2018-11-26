@@ -1,9 +1,9 @@
 package main
 
 import (
-	log "github.com/sirupsen/logrus"
-	"github.com/devinotelecom/concourse-git-resource/controller"
 	"encoding/json"
+	"github.com/devinotelecom/concourse-git-resource/controller"
+	log "github.com/sirupsen/logrus"
 	"os"
 )
 
@@ -15,9 +15,9 @@ func main() {
 		log.Fatalln(err)
 	}
 
-	controller.Init(input.Source.Url, input.Source.Branch, input.Source.PrivateKey, "")
+	controller.Init(input,"")
 
-	err = json.NewEncoder(os.Stdout).Encode(controller.Check(input.Source.Branch, input.Source.TagFilter, input.Source.PathSearch, input.Version.Ref, ""))
+	err = json.NewEncoder(os.Stdout).Encode(controller.Check(input,""))
 	if err != nil {
 		log.Fatalln(err)
 	}

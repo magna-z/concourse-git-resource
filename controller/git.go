@@ -99,7 +99,7 @@ func Checkout(path, ref string) {
 		log.Fatal(err)
 	}
 	var oid *git.Oid
-	obj, _ := repo.References.Lookup("refs/tags/" + ref)
+	obj, err := repo.References.Lookup("refs/tags/" + ref)
 	if obj != nil {
 		oid = obj.Target()
 	} else {
@@ -146,19 +146,23 @@ func LastCommit(path, branch string) RefResult {
 	return result
 }
 
-func GetMetaData(ref, path string) []map[string]string {
+func GetMetaData(path string, input Payload) []map[string]string {
 	repo, err := git.OpenRepository(path)
 	if err != nil {
 		log.Fatal(err)
 	}
 	var oid *git.Oid
-	obj, _ := repo.References.Lookup("refs/tags/" + ref)
+	obj, err := repo.References.Lookup("refs/tags/" + input.Version.Ref)
 	if obj != nil {
 		oid = obj.Target()
 	} else {
-		oid, _ = git.NewOid(ref)
+		oid, _ = git.NewOid(input.Version.Ref)
 	}
 	o, err := repo.LookupCommit(oid)
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	var result []map[string]string
 
 	commit := make(map[string]string)
@@ -175,11 +179,15 @@ func GetMetaData(ref, path string) []map[string]string {
 
 	branch := make(map[string]string)
 	branch["name"] = "branch"
-	branch["value"] = ""
+	branch["value"] = input.Source.Branch
 
 	tag := make(map[string]string)
 	tag["name"] = "tag"
 	tag["value"] = ""
+
+	if obj != nil {
+		tag["value"] = input.Version.Ref
+	}
 
 	message := make(map[string]string)
 	message["name"] = "message"
@@ -296,9 +304,10 @@ func listTag(path, tagFilter string) []Tag {
 	}
 	var result []Tag
 	err = repo.Tags.Foreach(func(name string, id *git.Oid) error {
-		t := Tag{Name: name, Commit: id.String(), When: tagWhen(repo, id)}
+		t := Tag{Name: name,
+		Commit: id.String(),
+		When: tagWhen(repo, id)}
 		re := regexp.MustCompile(tagFilter)
-
 		if re.MatchString(name) {
 			result = append(result, t)
 		}

@@ -23,7 +23,7 @@ func main() {
 
 	controller.Checkout(path, input.Version.Ref)
 
-	metadata := controller.GetMetaData(input.Version.Ref, path)
+	metadata := controller.GetMetaData(path, input)
 
 	result := controller.MetadataJson{controller.Ref{input.Version.Ref}, metadata}
 

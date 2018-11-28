@@ -22,10 +22,10 @@ type Ref struct {
 }
 
 type Source struct {
-	Url        string `json:"url"`
+	Url        string `json:"uri"`
 	Branch     string `json:"branch"`
 	TagFilter  string `json:"tag_filter"`
-	PathSearch string `json:"path_search"`
+	PathSearch []string `json:"paths"`
 	PrivateKey string `json:"private_key"`
 }
 
@@ -85,8 +85,8 @@ func Check(input Payload, path string) RefResult {
 	if input.Source.TagFilter != "" {
 		return LastTag(path, input.Source.TagFilter)
 	}
-	if input.Source.PathSearch != "" {
-		return CheckPaths(path, input.Source.Branch, input.Version.Ref, input.Source.PathSearch)
+	if input.Source.PathSearch != nil {
+		return CheckPath(path, input.Source.Branch, input.Version.Ref, input.Source.PathSearch)
 	} else {
 		return LastCommit(path, input.Source.Branch)
 	}
@@ -111,15 +111,15 @@ func Checkout(path, ref string) {
 
 }
 
-func CheckPaths(path, branch, ref, pathSearech string) RefResult {
-	re := regexp.MustCompile(pathSearech)
-	for _, pf := range diff(path, branch, ref) {
-		if re.MatchString(pf) {
-			commit := make(map[string]string)
-			commit["ref"] = ref
-			var result RefResult
-			result = append(result, commit)
-			return result
+func CheckPath(path, branch, ref string, paths []string) RefResult {
+	if ref == "" {
+		return LastCommit(path, branch)
+	}
+	for _, pathSearch := range paths{
+		for _, pf := range diff(path, branch, ref) {
+			if pf == pathSearch {
+				return LastCommit(path, branch)
+			}
 		}
 	}
 	return nil
@@ -200,8 +200,11 @@ func GetMetaData(path string, input Payload) []map[string]string {
 
 func LastTag(path, tagFilter string) RefResult {
 	list := listTag(path, tagFilter)
-	lastTag := lastTags(list)
-	return lastTag
+	if list != nil {
+		return lastTags(list)
+	}
+
+	return nil
 }
 
 func createSshPubKey() {
@@ -307,7 +310,7 @@ func listTag(path, tagFilter string) []Tag {
 		t := Tag{Name: name,
 		Commit: id.String(),
 		When: tagWhen(repo, id)}
-		re := regexp.MustCompile(tagFilter)
+		re := regexp.MustCompilePOSIX(tagFilter)
 		if re.MatchString(name) {
 			result = append(result, t)
 		}
@@ -370,12 +373,7 @@ func diff(path, branch, ref string) []string {
 	if err != nil {
 		log.Fatal(err)
 	}
-	var newTree *git.Tree
-	if ref == "" {
-		newTree, err = repo.LookupTree(commit.TreeId())
-	} else {
-		newTree = lookupCommit(repo, ref)
-	}
+	refTree := lookupCommit(repo, ref)
 	callbackInvoked := false
 	opts := git.DiffOptions{
 		NotifyCallback: func(diffSoFar *git.Diff, delta git.DiffDelta, matchedPathSpec string) error {
@@ -383,7 +381,7 @@ func diff(path, branch, ref string) []string {
 			return nil
 		},
 	}
-	diff, err := repo.DiffTreeToTree(originalTree, newTree, &opts)
+	diff, err := repo.DiffTreeToTree(originalTree, refTree, &opts)
 	if err != nil {
 		log.Fatal(err)
 	}

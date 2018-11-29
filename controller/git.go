@@ -12,6 +12,11 @@ import (
 	"strings"
 )
 
+type Config struct {
+	Input *Payload
+	Path string
+}
+
 type Payload struct {
 	Source  Source `json:"source"`
 	Version Ref    `json:"version"`
@@ -42,68 +47,52 @@ type Tag struct {
 
 type RefResult []map[string]string
 
-type MetadataResult []Metadata
-
-type Metadata struct {
-	commit   string
-	author   string
-	date     string
-	commiter string
-	message  string
-}
-
 var (
 	sshKeyPath = "/root/.ssh/"
 )
 
-func Init(input Payload, path string) {
-	if path == "" {
-		path = "/tmp/git-resource-request/"
-	}
+func Init(config Config) {
 	if !exists(sshKeyPath) {
 		os.MkdirAll(sshKeyPath, 0755)
-		ioutil.WriteFile(sshKeyPath+"id_rsa", []byte(input.Source.PrivateKey), 0600)
+		ioutil.WriteFile(sshKeyPath+"id_rsa", []byte(config.Input.Source.PrivateKey), 0600)
 		createSshPubKey()
 	}
-	if input.Source.Branch == "" {
-		input.Source.Branch = "master"
+	if config.Input.Source.Branch == "" {
+		config.Input.Source.Branch = "master"
 	}
-	if exists(path + "/.git") {
-		updateRepo(path)
+	if exists(config.Path + "/.git") {
+		updateRepo(config.Path)
 	} else {
-		getRepo(input.Source.Url, input.Source.Branch, path)
+		getRepo(config.Input.Source.Url, config.Input.Source.Branch, config.Path)
 	}
 }
 
-func Check(input Payload, path string) RefResult {
-	if input.Source.Branch == "" {
-		input.Source.Branch  = "master"
+func Check(config Config) RefResult {
+	if config.Input.Source.Branch == "" {
+		config.Input.Source.Branch  = "master"
 	}
-	if path == "" {
-		path = "/tmp/git-resource-request/"
+	if config.Input.Source.TagFilter != "" {
+		return CheckTag(config)
 	}
-	if input.Source.TagFilter != "" {
-		return LastTag(path, input.Source.TagFilter)
-	}
-	if input.Source.PathSearch != nil {
-		return CheckPath(path, input.Source.Branch, input.Version.Ref, input.Source.PathSearch)
+	if config.Input.Source.PathSearch != nil {
+		return CheckPath(config)
 	} else {
-		return LastCommit(path, input.Source.Branch)
+		return CheckCommit(config)
 	}
 	return nil
 }
 
-func Checkout(path, ref string) {
-	repo, err := git.OpenRepository(path)
+func Checkout(config Config) {
+	repo, err := git.OpenRepository(config.Path)
 	if err != nil {
 		log.Fatal(err)
 	}
 	var oid *git.Oid
-	obj, err := repo.References.Lookup("refs/tags/" + ref)
+	obj, err := repo.References.Lookup("refs/tags/" + config.Input.Version.Ref)
 	if obj != nil {
 		oid = obj.Target()
 	} else {
-		oid, _ = git.NewOid(ref)
+		oid, _ = git.NewOid(config.Input.Version.Ref)
 	}
 	repo.SetHeadDetached(oid)
 	repo.CheckoutHead(&git.CheckoutOpts{Strategy: git.CheckoutForce})
@@ -111,26 +100,29 @@ func Checkout(path, ref string) {
 
 }
 
-func CheckPath(path, branch, ref string, paths []string) RefResult {
-	if ref == "" {
-		return LastCommit(path, branch)
+func CheckPath(config Config) RefResult {
+	if config.Input.Version.Ref == "" {
+		return CheckCommit(config)
 	}
-	for _, pathSearch := range paths{
-		for _, pf := range diff(path, branch, ref) {
+	for _, pathSearch := range config.Input.Source.PathSearch{
+		for _, pf := range diff(config) {
 			if pf == pathSearch {
-				return LastCommit(path, branch)
+				return CheckCommit(config)
 			}
 		}
 	}
 	return nil
 }
 
-func LastCommit(path, branch string) RefResult {
-	repo, err := git.OpenRepository(path)
+func CheckCommit(config Config) RefResult {
+	if config.Input.Version.Ref != "" {
+		return lastCommits(config)
+	}
+	repo, err := git.OpenRepository(config.Path)
 	if err != nil {
 		log.Fatal(err)
 	}
-	remoteBranch, err := repo.References.Lookup("refs/remotes/origin/" + branch)
+	remoteBranch, err := repo.References.Lookup("refs/remotes/origin/" + config.Input.Source.Branch)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -146,7 +138,7 @@ func LastCommit(path, branch string) RefResult {
 	return result
 }
 
-func GetMetaData(path string, input Payload) []map[string]string {
+func GetMetaData(path string, input Payload) RefResult {
 	repo, err := git.OpenRepository(path)
 	if err != nil {
 		log.Fatal(err)
@@ -198,10 +190,15 @@ func GetMetaData(path string, input Payload) []map[string]string {
 	return result
 }
 
-func LastTag(path, tagFilter string) RefResult {
-	list := listTag(path, tagFilter)
+func CheckTag(config Config) RefResult {
+	list := listTag(config.Path, config.Input.Source.TagFilter)
+
+	if config.Input.Version.Ref != "" {
+		return lastTags(list, config)
+	}
+
 	if list != nil {
-		return lastTags(list)
+		return lastTag(list)
 	}
 
 	return nil
@@ -300,6 +297,38 @@ func tagWhen(repo *git.Repository, oid *git.Oid) int64 {
 	return 0
 }
 
+func lastCommits(config Config) RefResult  {
+	repo, err := git.OpenRepository(config.Path)
+	if err != nil {
+		log.Fatal(err)
+	}
+	odb, err := repo.Odb()
+	if err != nil {
+		log.Fatal(err)
+	}
+	var allCommitList []string
+	err = odb.ForEach(func(id *git.Oid) error {
+		obj, err := repo.Lookup(id)
+		if err != nil {
+			log.Fatal(err)
+		}
+		if obj.Type() == git.ObjectCommit {
+			allCommitList = append(allCommitList, obj.Id().String())
+		}
+		return nil
+	})
+	var result  RefResult
+	for _, c := range allCommitList {
+		ref := make(map[string]string)
+		ref["ref"] = c
+		result = append(result, ref)
+		if config.Input.Version.Ref == c {
+			break
+		}
+	}
+	return result
+}
+
 func listTag(path, tagFilter string) []Tag {
 	repo, err := git.OpenRepository(path)
 	if err != nil {
@@ -321,7 +350,7 @@ func listTag(path, tagFilter string) []Tag {
 
 }
 
-func lastTags(listTag []Tag) RefResult {
+func lastTag(listTag []Tag) RefResult {
 	sort.Slice(listTag, func(i, j int) bool {
 		if listTag[i].When < listTag[j].When {
 			return true
@@ -336,6 +365,29 @@ func lastTags(listTag []Tag) RefResult {
 	lastTag["ref"] = strings.Trim(lt.Name, "refs/tags/")
 	var result RefResult
 	result = append(result, lastTag)
+	return result
+}
+
+func lastTags(listTag []Tag, config Config) RefResult {
+	sort.Slice(listTag, func(i, j int) bool {
+		if listTag[i].When > listTag[j].When {
+			return true
+		}
+		if listTag[i].When < listTag[j].When {
+			return false
+		}
+		return listTag[i].When > listTag[j].When
+	})
+	var result RefResult
+	for _, t := range listTag {
+		lt := strings.Trim(t.Name, "refs/tags/")
+		ref := make(map[string]string)
+		ref["ref"] = lt
+		result = append(result, ref)
+		if config.Input.Version.Ref == lt {
+			break
+		}
+	}
 	return result
 }
 
@@ -356,12 +408,12 @@ func lookupCommit(repo *git.Repository, ref string) *git.Tree {
 	return tree
 }
 
-func diff(path, branch, ref string) []string {
-	repo, err := git.OpenRepository(path)
+func diff(config Config) []string {
+	repo, err := git.OpenRepository(config.Path)
 	if err != nil {
 		log.Fatal(err)
 	}
-	localBranch, err := repo.LookupBranch("origin/"+branch, git.BranchRemote)
+	localBranch, err := repo.LookupBranch("origin/"+config.Input.Source.Branch, git.BranchRemote)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -373,7 +425,7 @@ func diff(path, branch, ref string) []string {
 	if err != nil {
 		log.Fatal(err)
 	}
-	refTree := lookupCommit(repo, ref)
+	refTree := lookupCommit(repo, config.Input.Version.Ref)
 	callbackInvoked := false
 	opts := git.DiffOptions{
 		NotifyCallback: func(diffSoFar *git.Diff, delta git.DiffDelta, matchedPathSpec string) error {

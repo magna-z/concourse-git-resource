@@ -13,15 +13,23 @@ func main() {
 	var input controller.Payload
 
 	path := strings.Trim(fmt.Sprint(os.Args[1:]), "[]")
+	if path == "" {
+		path = "/tmp/git-resource-request/"
+	}
 
 	err := json.NewDecoder(os.Stdin).Decode(&input)
 	if err != nil {
 		log.Fatalln(err)
 	}
 
-	controller.Init(input, path)
+	config := controller.Config{
+		Input: &input,
+		Path: path,
+	}
 
-	controller.Checkout(path, input.Version.Ref)
+	controller.Init(config)
+
+	controller.Checkout(config)
 
 	metadata := controller.GetMetaData(path, input)
 

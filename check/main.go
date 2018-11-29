@@ -15,9 +15,14 @@ func main() {
 		log.Fatalln(err)
 	}
 
-	controller.Init(input,"")
+	config := controller.Config{
+		Input: &input,
+		Path: "/tmp/git-resource-request/",
+	}
 
-	err = json.NewEncoder(os.Stdout).Encode(controller.Check(input,""))
+	controller.Init(config)
+
+	err = json.NewEncoder(os.Stdout).Encode(controller.Check(config))
 	if err != nil {
 		log.Fatalln(err)
 	}

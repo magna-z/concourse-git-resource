@@ -321,7 +321,7 @@ func lastCommits(config Config) RefResult  {
 	for _, c := range allCommitList {
 		ref := make(map[string]string)
 		ref["ref"] = c
-		result = append(result, ref)
+		result = append([]map[string]string{ref}, result...)
 		if config.Input.Version.Ref == c {
 			break
 		}
@@ -383,7 +383,7 @@ func lastTags(listTag []Tag, config Config) RefResult {
 		lt := strings.Trim(t.Name, "refs/tags/")
 		ref := make(map[string]string)
 		ref["ref"] = lt
-		result = append(result, ref)
+		result = append([]map[string]string{ref}, result...)
 		if config.Input.Version.Ref == lt {
 			break
 		}

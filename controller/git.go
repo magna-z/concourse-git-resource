@@ -47,9 +47,7 @@ type Tag struct {
 
 type RefResult []map[string]string
 
-var (
-	sshKeyPath = "/root/.ssh/"
-)
+var sshKeyPath = "/root/.ssh/"
 
 func Init(config Config) {
 	if !exists(sshKeyPath) {
@@ -61,9 +59,9 @@ func Init(config Config) {
 		config.Input.Source.Branch = "master"
 	}
 	if exists(config.Path + "/.git") {
-		updateRepo(config.Path)
+		fetchRepo(config.Path)
 	} else {
-		getRepo(config.Input.Source.Url, config.Input.Source.Branch, config.Path)
+		cloneRepo(config.Input.Source.Url, config.Input.Source.Branch, config.Path)
 	}
 }
 
@@ -72,12 +70,12 @@ func Check(config Config) RefResult {
 		config.Input.Source.Branch  = "master"
 	}
 	if config.Input.Source.TagFilter != "" {
-		return CheckTag(config)
+		return checkTagFilter(config)
 	}
 	if config.Input.Source.PathSearch != nil {
-		return CheckPath(config)
+		return checkPaths(config)
 	} else {
-		return CheckCommit(config)
+		return checkCommit(config)
 	}
 	return nil
 }
@@ -100,21 +98,21 @@ func Checkout(config Config) {
 
 }
 
-func CheckPath(config Config) RefResult {
+func checkPaths(config Config) RefResult {
 	if config.Input.Version.Ref == "" {
-		return CheckCommit(config)
+		return checkCommit(config)
 	}
 	for _, pathSearch := range config.Input.Source.PathSearch{
 		for _, pf := range diff(config) {
 			if pf == pathSearch {
-				return CheckCommit(config)
+				return checkCommit(config)
 			}
 		}
 	}
 	return nil
 }
 
-func CheckCommit(config Config) RefResult {
+func checkCommit(config Config) RefResult {
 	if config.Input.Version.Ref != "" {
 		return lastCommits(config)
 	}
@@ -154,7 +152,6 @@ func GetMetaData(path string, input Payload) RefResult {
 	if err != nil {
 		log.Fatal(err)
 	}
-
 	var result []map[string]string
 
 	commit := make(map[string]string)
@@ -190,8 +187,8 @@ func GetMetaData(path string, input Payload) RefResult {
 	return result
 }
 
-func CheckTag(config Config) RefResult {
-	list := listTag(config.Path, config.Input.Source.TagFilter)
+func checkTagFilter(config Config) RefResult {
+	list := listTags(config.Path, config.Input.Source.TagFilter)
 
 	if config.Input.Version.Ref != "" {
 		return lastTags(list, config)
@@ -210,7 +207,6 @@ func createSshPubKey() {
 	if err != nil {
 		log.Fatal(err)
 	}
-
 	go func() {
 		defer stdin.Close()
 		io.WriteString(stdin, "values written to stdin are passed to cmd's standard input")
@@ -239,7 +235,7 @@ func exists(path string) bool {
 	return true
 }
 
-func getRepo(url, branch, path string) {
+func cloneRepo(url, branch, path string) {
 	cloneOptions := &git.CloneOptions{}
 	cloneOptions.CheckoutBranch = branch
 	cloneOptions.FetchOptions = &git.FetchOptions{
@@ -254,7 +250,7 @@ func getRepo(url, branch, path string) {
 	}
 }
 
-func updateRepo(path string) {
+func fetchRepo(path string) {
 	FetchOptions := &git.FetchOptions{
 		RemoteCallbacks: git.RemoteCallbacks{
 			CredentialsCallback:      credentialsCallback,
@@ -329,7 +325,7 @@ func lastCommits(config Config) RefResult  {
 	return result
 }
 
-func listTag(path, tagFilter string) []Tag {
+func listTags(path, tagFilter string) []Tag {
 	repo, err := git.OpenRepository(path)
 	if err != nil {
 		log.Fatal(err)
@@ -347,7 +343,6 @@ func listTag(path, tagFilter string) []Tag {
 	})
 	defer repo.Free()
 	return result
-
 }
 
 func lastTag(listTag []Tag) RefResult {

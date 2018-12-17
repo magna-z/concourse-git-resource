@@ -20,5 +20,5 @@ RUN apt update && \
 COPY . /go/src/github.com/devinotelecom/concourse-git-resource
 
 RUN go get -d -v github.com/sirupsen/logrus && \
-    go build --tags "static" -ldflags "-X main.version=1.0.0" -o /opt/resource/check $GOPATH/src/github.com/devinotelecom/concourse-git-resource/check && \
-    go build --tags "static" -ldflags "-X main.version=1.0.0" -o /opt/resource/in $GOPATH/src/github.com/devinotelecom/concourse-git-resource/in
+    go build --tags "static" -ldflags "-X main.build=`date -u +.%Y%m%d.%H%M%S`" -o /opt/resource/check $GOPATH/src/github.com/devinotelecom/concourse-git-resource/check && \
+    go build --tags "static" -ldflags "-X main.build=`date -u +.%Y%m%d.%H%M%S`" -o /opt/resource/in $GOPATH/src/github.com/devinotelecom/concourse-git-resource/in

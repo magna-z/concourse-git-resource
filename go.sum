@@ -1,0 +1,6 @@
+github.com/gobwas/glob v0.2.2 h1:czsC5u90AkrSujyGY0l7ST7QVLEPrdoMoXxRx/hXgq0=
+github.com/gobwas/glob v0.2.2/go.mod h1:d3Ez4x06l9bZtSvzIay5+Yzi0fmZzPgnTbPcKjJAkT8=
+github.com/gobwas/glob v0.2.3 h1:A4xDbljILXROh+kObIiy5kIaPYD8e96x1tgBhUI5J+Y=
+github.com/gobwas/glob v0.2.3/go.mod h1:d3Ez4x06l9bZtSvzIay5+Yzi0fmZzPgnTbPcKjJAkT8=
+gopkg.in/libgit2/git2go.v27 v27.0.0-20190104134018-ecaeb7a21d47 h1:gVq25a2FQDJb6aZPd4GA8gJmM19LHgUTZzuq+LqcXBE=
+gopkg.in/libgit2/git2go.v27 v27.0.0-20190104134018-ecaeb7a21d47/go.mod h1:lKrzYfERNvPdRbevxLdKadsT0XwHJ10JC05CXIQgmWc=

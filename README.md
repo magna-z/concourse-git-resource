@@ -1,8 +1,10 @@
 Concourse Git Resource on Golang + git2go(libgit2)
 ---
 
-Track the commits or tags in a [git](http://git-scm.com) repository.
-Builded and based on Alpine v3.9 with extend libraries [musl](https://musl-libc.org) and [libgit2-0.27.7](https://libgit2.org).
+Track the commits or tags in a [git](http://git-scm.com) repository.  
+Builded and based on Alpine with extend libraries [musl](https://musl-libc.org) and [libgit2-0.27.7](https://libgit2.org).
+
+[![](https://images.microbadger.com/badges/image/devinotelecom/concourse-git-resource.svg)](https://microbadger.com/images/devinotelecom/concourse-git-resource)
 
 ## Source configuration
 

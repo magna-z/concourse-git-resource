@@ -43,6 +43,10 @@ func Out(payload *OutPayload, workdir string, printer *common.Printer) {
 		}
 	}
 
+	if tag == "" {
+		panic(fmt.Sprintln("tag_path at \"", payload.Params.TagPath, "\" is empty"))
+	}
+
 	if payload.Params.TagMessagePath != "" {
 		tagMsg, err = getFileContent(wd + payload.Params.TagMessagePath)
 		if err != nil {

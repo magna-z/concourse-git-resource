@@ -238,6 +238,7 @@ func (repo Repository) getChangedFiles(c *git.Commit) []string {
 	}
 
 	// Only first parent commit
+	// TODO: Handling all parrents
 	pc = c.Parent(0)
 	defer pc.Free()
 
@@ -247,15 +248,22 @@ func (repo Repository) getChangedFiles(c *git.Commit) []string {
 
 	diff, err := repo.gitRepository.DiffTreeToTree(ct, pct, &git.DiffOptions{})
 	checkPanic(err, "Get tree diff error")
-	defer checkPanic(diff.Free(), "Diff tree release error")
+
+	if _, err = diff.NumDeltas(); err == git.ErrInvalid {
+		return files
+	}
 
 	checkPanic(
-		diff.ForEach(func(diffDetail git.DiffDelta, diff float64) (git.DiffForEachHunkCallback, error) {
-			files = append(files, diffDetail.NewFile.Path)
-			return nil, nil
-		}, 0),
+		diff.ForEach(
+			func(diffDetail git.DiffDelta, diff float64) (git.DiffForEachHunkCallback, error) {
+				files = append(files, diffDetail.NewFile.Path)
+				return nil, nil
+			}, git.DiffDetailFiles,
+		),
 		"Diff tree foreach error",
 	)
+
+	checkPanic(diff.Free(), "Diff tree release error")
 
 	return files
 }

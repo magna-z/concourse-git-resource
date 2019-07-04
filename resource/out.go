@@ -59,12 +59,8 @@ func Out(payload *OutPayload, workdir string, printer *common.Printer) {
 		})
 	defer repo.Close()
 
-	var commit *git.Commit
-
-	if tag != "" {
-		commit = repo.CreateTag(tag, tagMsg)
-		repo.PushTag(tag)
-	}
+	commit := repo.CreateTag(tag, tagMsg)
+	repo.PushTag(tag)
 
 	var meta []map[string]string
 	meta = append(meta, map[string]string{"name": "Commit", "value": commit.Id})

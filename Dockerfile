@@ -3,7 +3,6 @@ COPY . /go/app
 RUN set -ex && \
     apk add --no-cache --no-progress libgit2-dev gcc git musl-dev && \
     cd /go/app && \
-    go get -v && \
     go install
 
 FROM alpine:3.9

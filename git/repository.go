@@ -158,18 +158,33 @@ func (repo Repository) CheckoutTag(t string) *Commit {
 }
 
 // Force checkout repository to target ID
-func (repo Repository) doCheckout(id *git.Oid) *Commit {
-	err := repo.gitRepository.SetHeadDetached(id)
+func (repo Repository) doCheckout(oid *git.Oid) *Commit {
+	err := repo.gitRepository.SetHeadDetached(oid)
 	checkPanic(err, "Set HEAD error")
 
-	repo.gitRepository.CheckoutHead(&git.CheckoutOpts{Strategy: git.CheckoutForce})
-	checkPanic(err, "CheckoutTag HEAD error")
+	checkPanic(
+		repo.gitRepository.CheckoutHead(&git.CheckoutOpts{Strategy: git.CheckoutForce}),
+		"CheckoutTag HEAD error",
+	)
 
-	c, err := repo.gitRepository.LookupCommit(id)
-	checkPanic(err, "Lookup commit by ID error")
+	o, err := repo.gitRepository.Lookup(oid)
+	checkPanic(err, "Lookup object by Oid error")
+	defer o.Free()
+
+	if o.Type() == git.ObjectTag {
+		t, err := o.AsTag()
+		checkPanic(err, "Get object as tag error")
+		defer t.Free()
+
+		o = t.Target()
+	}
+
+	c, err := o.AsCommit()
+	checkPanic(err, "Get commit by object error")
+	defer c.Free()
 
 	return &Commit{
-		Id:        id.String(),
+		Id:        oid.String(),
 		Message:   c.Message(),
 		Author:    c.Author(),
 		Committer: c.Committer(),
@@ -210,13 +225,15 @@ func (repo Repository) getChangedFiles(c *git.Commit) []string {
 	defer ct.Free()
 
 	if c.ParentCount() == 0 {
-
-		ct.Walk(func(path string, ent *git.TreeEntry) int {
-			if ent.Type == git.ObjectBlob {
-				files = append(files, path+ent.Name)
-			}
-			return 0
-		})
+		checkPanic(
+			ct.Walk(func(path string, ent *git.TreeEntry) int {
+				if ent.Type == git.ObjectBlob {
+					files = append(files, path+ent.Name)
+				}
+				return 0
+			}),
+			"Commits tree walk error",
+		)
 		return files
 	}
 
@@ -230,12 +247,15 @@ func (repo Repository) getChangedFiles(c *git.Commit) []string {
 
 	diff, err := repo.gitRepository.DiffTreeToTree(ct, pct, &git.DiffOptions{})
 	checkPanic(err, "Get tree diff error")
-	defer diff.Free()
+	defer checkPanic(diff.Free(), "Diff tree release error")
 
-	diff.ForEach(func(diffDetail git.DiffDelta, diff float64) (git.DiffForEachHunkCallback, error) {
-		files = append(files, diffDetail.NewFile.Path)
-		return nil, nil
-	}, 0)
+	checkPanic(
+		diff.ForEach(func(diffDetail git.DiffDelta, diff float64) (git.DiffForEachHunkCallback, error) {
+			files = append(files, diffDetail.NewFile.Path)
+			return nil, nil
+		}, 0),
+		"Diff tree foreach error",
+	)
 
 	return files
 }
@@ -247,7 +267,7 @@ func (repo Repository) ListCommits() []*Commit {
 	defer w.Free()
 
 	w.Sorting(git.SortTopological)
-	w.PushHead()
+	checkPanic(w.PushHead(), "Commits walk push head error")
 
 	var commits []*Commit
 	checkPanic(

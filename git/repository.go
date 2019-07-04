@@ -238,7 +238,7 @@ func (repo Repository) getChangedFiles(c *git.Commit) []string {
 	}
 
 	// Only first parent commit
-	// TODO: Handling all parrents
+	// TODO: Handling all parents
 	pc = c.Parent(0)
 	defer pc.Free()
 

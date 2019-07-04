@@ -39,28 +39,31 @@ func Out(payload *OutPayload, workdir string, printer *common.Printer) {
 	if payload.Params.TagPath != "" {
 		tag, err = getFileContent(wd + payload.Params.TagPath)
 		if err != nil {
-			panic(fmt.Sprintln("tag_path at \"", payload.Params.TagPath, "\" not found"))
+			panic(fmt.Sprintf("tag_path at \"%s\" not found", payload.Params.TagPath))
 		}
 	}
 
 	if tag == "" {
-		panic(fmt.Sprintln("tag_path at \"", payload.Params.TagPath, "\" is empty"))
+		panic(fmt.Sprintf("tag_path at \"%s\" is empty", payload.Params.TagPath))
 	}
 
 	if payload.Params.TagMessagePath != "" {
 		tagMsg, err = getFileContent(wd + payload.Params.TagMessagePath)
 		if err != nil {
-			panic(fmt.Sprintln("tag_message_path at \"", payload.Params.TagMessagePath, "\" not found"))
+			panic(fmt.Sprintf("tag_message_path at \"%s\" not found", payload.Params.TagMessagePath))
 		}
 	}
 
 	repo := git.Open(
-		wd+payload.Params.Repository, payload.Source.Branch, git.RepositoryParams{
+		wd+payload.Params.Repository,
+		payload.Source.Branch,
+		git.RepositoryParams{
 			RemoteUrl:     payload.Source.Url,
 			HttpLogin:     payload.Source.Login,
 			HttpPassword:  payload.Source.Password,
 			SshPrivateKey: payload.Source.PrivateKey,
-		})
+		},
+	)
 	defer repo.Close()
 
 	commit := repo.CreateTag(tag, tagMsg)
@@ -74,7 +77,7 @@ func Out(payload *OutPayload, workdir string, printer *common.Printer) {
 	meta = append(meta, map[string]string{"name": "Author", "value": fmt.Sprintf("%s <%s>", commit.Author.Name, commit.Author.Email)})
 
 	printer.PrintData(map[string]interface{}{
-		"version":  commit.Id,
+		"version":  map[string]string{"ref": commit.Id},
 		"metadata": meta,
 	})
 }

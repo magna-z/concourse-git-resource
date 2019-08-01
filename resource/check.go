@@ -26,12 +26,20 @@ func NewCheckPayload(stdin []byte) *CheckPayload {
 
 func Check(payload *CheckPayload, printer *common.Printer) {
 	path := os.TempDir() + DirectoryName
-	repo := git.Open(path, payload.Source.Branch, git.RepositoryParams{
+	params := git.RepositoryParams{
 		RemoteUrl:     payload.Source.Url,
 		HttpLogin:     payload.Source.Login,
 		HttpPassword:  payload.Source.Password,
 		SshPrivateKey: payload.Source.PrivateKey,
-	})
+	}
+
+	var repo *git.Repository
+	repo, err := git.Open(path, payload.Source.Branch, params)
+	if err == nil {
+		repo.Update()
+	} else {
+		repo = git.Clone(path, payload.Source.Branch, params)
+	}
 	defer repo.Close()
 
 	var refs []common.Version

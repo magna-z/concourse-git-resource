@@ -19,7 +19,7 @@ type RepositoryParams struct {
 type Repository struct {
 	gitRepository *git.Repository
 	params        RepositoryParams
-	path          string
+	branch        string
 }
 
 type Commit struct {
@@ -74,69 +74,85 @@ func (repo Repository) createRemoteCallbacks() git.RemoteCallbacks {
 	}
 }
 
-// Open or clone git repository on path
-func Open(path string, branch string, params RepositoryParams) *Repository {
-	var (
-		err  error
-		repo = Repository{
-			params: params,
-			path:   path,
-		}
-	)
-
-	fetchOptions := &git.FetchOptions{
+// Create and return git.FetchOptions with authentication
+func (repo Repository) createFetchOptions() *git.FetchOptions {
+	return &git.FetchOptions{
 		Prune:           git.FetchPruneUnspecified,
 		DownloadTags:    git.DownloadTagsAll,
 		RemoteCallbacks: repo.createRemoteCallbacks(),
 	}
+}
 
-	repo.gitRepository, err = git.OpenRepository(repo.path)
-	if err == nil {
-		h, err := repo.gitRepository.Head()
-		checkPanic(err, "Getting HEAD error")
-		defer h.Free()
-
-		if branch == "" {
-			branch, err = repo.getLocalBranch().Name()
-			checkPanic(err, "Get branch name error")
+// Clone repository to path
+func Clone(path string, branch string, params RepositoryParams) *Repository {
+	var (
+		err  error
+		repo = Repository{
+			params: params,
+			branch: branch,
 		}
-		r, err := repo.gitRepository.Remotes.Lookup("origin")
-		checkPanic(err, "Remote origin lookup error")
-		defer r.Free()
-
-		checkPanic(
-			r.Fetch([]string{}, fetchOptions, ""),
-			"Remote fetch error",
-		)
-
-		rb, err := repo.gitRepository.References.Lookup("refs/remotes/origin/" + branch)
-		checkPanic(err, "Remote branch lookup error")
-		defer rb.Free()
-
-		remoteTarget := rb.Target()
-		if h.Target().String() == remoteTarget.String() {
-			return &repo
-		}
-
-		rc, err := repo.gitRepository.LookupCommit(remoteTarget)
-		checkPanic(err, "Remote commit lookup error")
-		defer rc.Free()
-
-		checkPanic(
-			repo.gitRepository.ResetToCommit(rc, git.ResetHard, &git.CheckoutOpts{}),
-			"Reset to r commit error",
-		)
-
-		return &repo
-	}
+	)
 
 	repo.gitRepository, err = git.Clone(params.RemoteUrl, path, &git.CloneOptions{
 		CheckoutBranch: branch,
-		FetchOptions:   fetchOptions,
+		FetchOptions:   repo.createFetchOptions(),
 	})
-	checkPanic(err, "Clone repo error")
+	checkPanic(err, "Clone repository error")
 
 	return &repo
+}
+
+// Open repository from path
+func Open(path string, branch string, params RepositoryParams) (*Repository, error) {
+	var (
+		err  error
+		repo = Repository{
+			params: params,
+			branch: branch,
+		}
+	)
+
+	repo.gitRepository, err = git.OpenRepository(path)
+
+	return &repo, err
+}
+
+// Update repository
+func (repo Repository) Update() {
+	h, err := repo.gitRepository.Head()
+	checkPanic(err, "Getting HEAD error")
+	defer h.Free()
+
+	if repo.branch == "" {
+		repo.branch, err = repo.getLocalBranch().Name()
+		checkPanic(err, "Get branch name error")
+	}
+	r, err := repo.gitRepository.Remotes.Lookup("origin")
+	checkPanic(err, "Remote origin lookup error")
+	defer r.Free()
+
+	checkPanic(
+		r.Fetch([]string{}, repo.createFetchOptions(), ""),
+		"Remote fetch error",
+	)
+
+	rb, err := repo.gitRepository.References.Lookup("refs/remotes/origin/" + repo.branch)
+	checkPanic(err, "Remote branch lookup error")
+	defer rb.Free()
+
+	remoteTarget := rb.Target()
+	if h.Target().String() == remoteTarget.String() {
+		return
+	}
+
+	rc, err := repo.gitRepository.LookupCommit(remoteTarget)
+	checkPanic(err, "Remote commit lookup error")
+	defer rc.Free()
+
+	checkPanic(
+		repo.gitRepository.ResetToCommit(rc, git.ResetHard, &git.CheckoutOpts{}),
+		"Reset to remote commit error",
+	)
 }
 
 // Checkout repository to commit

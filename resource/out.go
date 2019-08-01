@@ -54,7 +54,7 @@ func Out(payload *OutPayload, workdir string, printer *common.Printer) {
 		}
 	}
 
-	repo := git.Open(
+	repo, err := git.Open(
 		wd+payload.Params.Repository,
 		payload.Source.Branch,
 		git.RepositoryParams{
@@ -64,6 +64,9 @@ func Out(payload *OutPayload, workdir string, printer *common.Printer) {
 			SshPrivateKey: payload.Source.PrivateKey,
 		},
 	)
+	if err != nil {
+		panic(fmt.Sprint("Open repository error:", err))
+	}
 	defer repo.Close()
 
 	commit := repo.CreateTag(tag, tagMsg)
@@ -77,7 +80,7 @@ func Out(payload *OutPayload, workdir string, printer *common.Printer) {
 	meta = append(meta, map[string]string{"name": "Author", "value": fmt.Sprintf("%s <%s>", commit.Author.Name, commit.Author.Email)})
 
 	printer.PrintData(map[string]interface{}{
-		"version":  map[string]string{"ref": commit.Id},
+		"version":  common.Version{Reference: commit.Id},
 		"metadata": meta,
 	})
 }

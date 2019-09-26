@@ -319,6 +319,16 @@ func (repo Repository) tsKeysContains(s []int64, v int64) bool {
 	return false
 }
 
+// Check value exists in slice
+func (repo Repository) commitTagsContains(s map[string]string, v string) bool {
+	for _, a := range s {
+		if a == v {
+			return true
+		}
+	}
+	return false
+}
+
 // Return slice with all parent commits
 func (repo Repository) commitParents(c *git.Commit) []*git.Commit {
 	pc := int(c.ParentCount())
@@ -330,6 +340,30 @@ func (repo Repository) commitParents(c *git.Commit) []*git.Commit {
 	return p
 }
 
+//Sort and clean unique tags by key as timestamp from commit
+func (repo Repository) formatTags(tsTags map[int64]string) []string {
+	var (
+		float64Keys []float64
+		tags        []string
+	)
+
+	for k, _ := range tsTags {
+		float64Keys = append(float64Keys, float64(k))
+	}
+
+	sort.Float64s(float64Keys)
+	for _, v := range float64Keys {
+		tags = append(tags, tsTags[int64(v)])
+	}
+
+	for i := len(tags)/2 - 1; i >= 0; i-- {
+		opp := len(tags) - 1 - i
+		tags[i], tags[opp] = tags[opp], tags[i]
+	}
+
+	return tags
+}
+
 // Listing all tags with sorting by commit timestamp
 func (repo Repository) ListTags() []string {
 	ri, err := repo.gitRepository.NewReferenceIterator()
@@ -337,7 +371,8 @@ func (repo Repository) ListTags() []string {
 	defer ri.Free()
 
 	var tsKeys []int64
-	refs := make(map[int64]string)
+	tsTags := make(map[int64]string)
+	commitTags := make(map[string]string)
 	for {
 		r, err := ri.Next()
 		if err != nil {
@@ -368,28 +403,21 @@ func (repo Repository) ListTags() []string {
 		}
 		defer c.Free()
 
-		ts := c.Committer().When.UnixNano()
-		if repo.tsKeysContains(tsKeys, ts) {
+		cid := c.Id().String()
+		cts := c.Committer().When.UnixNano()
+		if repo.tsKeysContains(tsKeys, cts) && !repo.commitTagsContains(commitTags, cid) {
 			for _, p := range repo.commitParents(c) {
-				if ts == p.Committer().When.UnixNano() {
-					ts = ts + 1
+				if cts == p.Committer().When.UnixNano() {
+					cts = cts + 1
 				}
 			}
 		}
-		tsKeys = append(tsKeys, ts)
-		refs[ts] = tag
+		tsKeys = append(tsKeys, cts)
+		tsTags[cts] = tag
+		commitTags[tag] = cid
 	}
 
-	sort.Slice(tsKeys, func(i, j int) bool {
-		return tsKeys[i] > tsKeys[j]
-	})
-
-	var tags []string
-	for _, v := range tsKeys {
-		tags = append(tags, refs[v])
-	}
-
-	return tags
+	return repo.formatTags(tsTags)
 }
 
 // Create tag on HEAD

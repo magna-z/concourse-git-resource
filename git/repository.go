@@ -232,7 +232,7 @@ func (repo Repository) getLocalBranch() *git.Branch {
 // Get files list changed on commit
 func (repo Repository) getChangedFiles(c *git.Commit) []string {
 	var (
-		pc    *git.Commit
+		cp    *git.Commit
 		files []string
 	)
 
@@ -255,14 +255,14 @@ func (repo Repository) getChangedFiles(c *git.Commit) []string {
 
 	// Only first parent commit
 	// TODO: Handling all parents
-	pc = c.Parent(0)
-	defer pc.Free()
+	cp = c.Parent(0)
+	defer cp.Free()
 
-	pct, err := pc.Tree()
+	cpt, err := cp.Tree()
 	checkPanic(err, "Get commit parent tree error")
-	defer pct.Free()
+	defer cpt.Free()
 
-	diff, err := repo.gitRepository.DiffTreeToTree(ct, pct, &git.DiffOptions{})
+	diff, err := repo.gitRepository.DiffTreeToTree(ct, cpt, &git.DiffOptions{})
 	checkPanic(err, "Get tree diff error")
 
 	if _, err = diff.NumDeltas(); err == git.ErrInvalid {
@@ -309,14 +309,35 @@ func (repo Repository) ListCommits() []*Commit {
 	return commits
 }
 
+// Check value exists in slice
+func (repo Repository) tsKeysContains(s []int64, v int64) bool {
+	for _, a := range s {
+		if a == v {
+			return true
+		}
+	}
+	return false
+}
+
+// Return slice with all parent commits
+func (repo Repository) commitParents(c *git.Commit) []*git.Commit {
+	pc := int(c.ParentCount())
+	p := make([]*git.Commit, pc)
+	for i := 0; i < pc; i++ {
+		p = append(p, c.Parent(uint(i)))
+	}
+
+	return p
+}
+
 // Listing all tags with sorting by commit timestamp
 func (repo Repository) ListTags() []string {
 	ri, err := repo.gitRepository.NewReferenceIterator()
 	checkPanic(err, "Reference iterator error")
 	defer ri.Free()
 
-	var keys []int
-	refs := make(map[int]string)
+	var tsKeys []int64
+	refs := make(map[int64]string)
 	for {
 		r, err := ri.Next()
 		if err != nil {
@@ -347,17 +368,24 @@ func (repo Repository) ListTags() []string {
 		}
 		defer c.Free()
 
-		ts := int(c.Committer().When.Unix())
-		keys = append(keys, ts)
+		ts := c.Committer().When.UnixNano()
+		if repo.tsKeysContains(tsKeys, ts) {
+			for _, p := range repo.commitParents(c) {
+				if ts == p.Committer().When.UnixNano() {
+					ts = ts + 1
+				}
+			}
+		}
+		tsKeys = append(tsKeys, ts)
 		refs[ts] = tag
 	}
 
-	sort.Slice(keys, func(i, j int) bool {
-		return keys[i] > keys[j]
+	sort.Slice(tsKeys, func(i, j int) bool {
+		return tsKeys[i] > tsKeys[j]
 	})
 
 	var tags []string
-	for _, v := range keys {
+	for _, v := range tsKeys {
 		tags = append(tags, refs[v])
 	}
 

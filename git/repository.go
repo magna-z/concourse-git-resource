@@ -3,6 +3,7 @@ package git
 import (
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -309,51 +310,28 @@ func (repo Repository) ListCommits() []*Commit {
 	return commits
 }
 
-// Check value exists in slice
-func (repo Repository) tsKeysContains(s []int64, v int64) bool {
-	for _, a := range s {
-		if a == v {
-			return true
-		}
-	}
-	return false
-}
-
-// Check value exists in slice
-func (repo Repository) commitTagsContains(s map[string]string, v string) bool {
-	for _, a := range s {
-		if a == v {
-			return true
-		}
-	}
-	return false
-}
-
 // Return slice with all parent commits
 func (repo Repository) commitParents(c *git.Commit) []*git.Commit {
-	pc := int(c.ParentCount())
-	p := make([]*git.Commit, pc)
-	for i := 0; i < pc; i++ {
-		p = append(p, c.Parent(uint(i)))
+	var p []*git.Commit
+	for i := 0; i < int(c.ParentCount()); i++ {
+		pid := c.ParentId(uint(i))
+		pc, _ := repo.gitRepository.LookupCommit(pid)
+		p = append(p, pc)
 	}
-
 	return p
 }
 
 //Sort and clean unique tags by key as timestamp from commit
-func (repo Repository) formatTags(tsTags map[int64]string) []string {
-	var (
-		float64Keys []float64
-		tags        []string
-	)
+func (repo Repository) formatTags(tsTags map[string]string) []string {
+	var keys, tags []string
 
 	for k, _ := range tsTags {
-		float64Keys = append(float64Keys, float64(k))
+		keys = append(keys, k)
 	}
 
-	sort.Float64s(float64Keys)
-	for _, v := range float64Keys {
-		tags = append(tags, tsTags[int64(v)])
+	sort.Strings(keys)
+	for _, k := range keys {
+		tags = append(tags, tsTags[k])
 	}
 
 	for i := len(tags)/2 - 1; i >= 0; i-- {
@@ -370,9 +348,7 @@ func (repo Repository) ListTags() []string {
 	checkPanic(err, "Reference iterator error")
 	defer ri.Free()
 
-	var tsKeys []int64
-	tsTags := make(map[int64]string)
-	commitTags := make(map[string]string)
+	tsTags := make(map[string]string)
 	for {
 		r, err := ri.Next()
 		if err != nil {
@@ -403,18 +379,15 @@ func (repo Repository) ListTags() []string {
 		}
 		defer c.Free()
 
-		cid := c.Id().String()
 		cts := c.Committer().When.UnixNano()
-		if repo.tsKeysContains(tsKeys, cts) && !repo.commitTagsContains(commitTags, cid) {
+		if c.ParentCount() == 2 {
 			for _, p := range repo.commitParents(c) {
 				if cts == p.Committer().When.UnixNano() {
 					cts = cts + 1
 				}
 			}
 		}
-		tsKeys = append(tsKeys, cts)
-		tsTags[cts] = tag
-		commitTags[tag] = cid
+		tsTags[strconv.FormatInt(cts, 10)] = tag
 	}
 
 	return repo.formatTags(tsTags)

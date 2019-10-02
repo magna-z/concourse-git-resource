@@ -156,6 +156,24 @@ func (repo Repository) Update() {
 	)
 }
 
+// Return HEAD commit
+func (repo Repository) HeadCommit() *Commit {
+	h, err := repo.gitRepository.Head()
+	checkPanic(err, "Getting HEAD error")
+	defer h.Free()
+
+	c, err := repo.gitRepository.LookupCommit(h.Target())
+	checkPanic(err, "Lookup HEAD commit error")
+	defer c.Free()
+
+	return &Commit{
+		Id:        c.Id().String(),
+		Message:   c.Message(),
+		Author:    c.Author(),
+		Committer: c.Committer(),
+	}
+}
+
 // Checkout repository to commit
 func (repo Repository) CheckoutCommit(c string) *Commit {
 	id, err := git.NewOid(c)

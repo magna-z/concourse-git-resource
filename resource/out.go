@@ -11,13 +11,15 @@ import (
 	"concourse-git-resource/git"
 )
 
+type OutParams struct {
+	Repository     string
+	TagPath        string `json:"tag_path"`
+	TagMessagePath string `json:"tag_message_path"`
+}
+
 type OutPayload struct {
 	common.Payload
-	Params struct {
-		Repository     string
-		TagPath        string `json:"tag_path"`
-		TagMessagePath string `json:"tag_message_path"`
-	}
+	Params OutParams
 }
 
 func NewOutPayload(stdin []byte) *OutPayload {
@@ -32,28 +34,11 @@ func Out(payload *OutPayload, workdir string, printer *common.Printer) {
 		err    error
 		tag    string
 		tagMsg string
+		commit *git.Commit
+		meta   []map[string]string
 	)
 
 	wd := strings.TrimSuffix(workdir, string(filepath.Separator)) + string(filepath.Separator)
-
-	if payload.Params.TagPath != "" {
-		tag, err = getFileContent(wd + payload.Params.TagPath)
-		if err != nil {
-			panic(fmt.Sprintf("tag_path at \"%s\" not found", payload.Params.TagPath))
-		}
-	}
-
-	if tag == "" {
-		panic(fmt.Sprintf("tag_path at \"%s\" is empty", payload.Params.TagPath))
-	}
-
-	if payload.Params.TagMessagePath != "" {
-		tagMsg, err = getFileContent(wd + payload.Params.TagMessagePath)
-		if err != nil {
-			panic(fmt.Sprintf("tag_message_path at \"%s\" not found", payload.Params.TagMessagePath))
-		}
-	}
-
 	repo, err := git.Open(
 		wd+payload.Params.Repository,
 		payload.Source.Branch,
@@ -69,12 +54,28 @@ func Out(payload *OutPayload, workdir string, printer *common.Printer) {
 	}
 	defer repo.Close()
 
-	commit := repo.CreateTag(tag, tagMsg)
-	repo.PushTag(tag)
+	if payload.Params.TagPath != "" && payload.Params.TagMessagePath != "" {
+		tag, err = getFileContent(wd + payload.Params.TagPath)
+		if err != nil {
+			panic(fmt.Sprintf("tag_path at \"%s\" not found", payload.Params.TagPath))
+		}
+		if tag == "" {
+			panic(fmt.Sprintf("tag_path at \"%s\" is empty", payload.Params.TagPath))
+		}
 
-	var meta []map[string]string
+		tagMsg, err = getFileContent(wd + payload.Params.TagMessagePath)
+		if err != nil {
+			panic(fmt.Sprintf("tag_message_path at \"%s\" not found", payload.Params.TagMessagePath))
+		}
+
+		commit = repo.CreateTag(tag, tagMsg)
+		repo.PushTag(tag)
+		meta = append(meta, map[string]string{"name": "Tag", "value": commit.Tag})
+	} else {
+		commit = repo.HeadCommit()
+	}
+
 	meta = append(meta, map[string]string{"name": "Commit", "value": commit.Id})
-	meta = append(meta, map[string]string{"name": "Tag", "value": commit.Tag})
 	meta = append(meta, map[string]string{"name": "Message", "value": strings.TrimSpace(commit.Message)})
 	meta = append(meta, map[string]string{"name": "Date", "value": commit.Author.When.Format(time.RFC822)})
 	meta = append(meta, map[string]string{"name": "Author", "value": fmt.Sprintf("%s <%s>", commit.Author.Name, commit.Author.Email)})

@@ -1,14 +1,15 @@
 package resource
 
 import (
+	"fmt"
 	"os"
 	"regexp"
 	"sort"
 
+	"github.com/gobwas/glob"
+
 	"concourse-git-resource/common"
 	"concourse-git-resource/git"
-
-	"github.com/gobwas/glob"
 )
 
 const DirectoryName = "git-repository-cache"
@@ -32,6 +33,8 @@ func Check(payload *CheckPayload, printer *common.Printer) {
 		HttpPassword:  payload.Source.Password,
 		SshPrivateKey: payload.Source.PrivateKey,
 	}
+
+	fmt.Fprintln(os.Stderr, fmt.Sprintf("check: workdir=%q, remote=%q", path, params.RemoteUrl))
 
 	var repo *git.Repository
 	repo, err := git.Open(path, payload.Source.Branch, params)

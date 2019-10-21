@@ -2,6 +2,7 @@ package git
 
 import (
 	"fmt"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -86,6 +87,8 @@ func (repo Repository) createFetchOptions() *git.FetchOptions {
 
 // Clone repository to path
 func Clone(path string, branch string, params RepositoryParams) *Repository {
+	fmt.Fprintln(os.Stderr, fmt.Sprintf("repository: clone, branch=%q", branch))
+
 	var (
 		err  error
 		repo = Repository{
@@ -105,6 +108,8 @@ func Clone(path string, branch string, params RepositoryParams) *Repository {
 
 // Open repository from path
 func Open(path string, branch string, params RepositoryParams) (*Repository, error) {
+	fmt.Fprintln(os.Stderr, fmt.Sprintf("repository: open, branch=%q", branch))
+
 	var (
 		err  error
 		repo = Repository{
@@ -120,6 +125,8 @@ func Open(path string, branch string, params RepositoryParams) (*Repository, err
 
 // Update repository
 func (repo Repository) Update() {
+	fmt.Fprintln(os.Stderr, "repository: update")
+
 	h, err := repo.gitRepository.Head()
 	checkPanic(err, "Getting HEAD error")
 	defer h.Free()
@@ -176,6 +183,8 @@ func (repo Repository) HeadCommit() *Commit {
 
 // Checkout repository to commit
 func (repo Repository) CheckoutCommit(c string) *Commit {
+	fmt.Fprintln(os.Stderr, fmt.Sprintf("repository: checkout, commit=%q", c))
+
 	id, err := git.NewOid(c)
 	checkPanic(err, "Commit ID error")
 
@@ -184,6 +193,8 @@ func (repo Repository) CheckoutCommit(c string) *Commit {
 
 // Checkout repository to tag
 func (repo Repository) CheckoutTag(t string) *Commit {
+	fmt.Fprintln(os.Stderr, fmt.Sprintf("repository: checkout, tag=%q", t))
+
 	refs := repo.gitRepository.References
 	ref, err := refs.Dwim(t)
 	checkPanic(err, "Reference dwim error")
@@ -413,6 +424,8 @@ func (repo Repository) ListTags() []string {
 
 // Create tag on HEAD
 func (repo Repository) CreateTag(tag string, msg string) *Commit {
+	fmt.Fprintln(os.Stderr, fmt.Sprintf("repository: tag, tag=%q, message=%q", tag, msg))
+
 	h, err := repo.gitRepository.Head()
 	checkPanic(err, "Getting HEAD error")
 	defer h.Free()
@@ -448,6 +461,7 @@ func (repo Repository) CreateTag(tag string, msg string) *Commit {
 }
 
 func (repo Repository) PushTag(tag string) {
+	fmt.Fprintln(os.Stderr, fmt.Sprintf("repository: push, tag=%q", tag))
 	r, err := repo.gitRepository.Remotes.Lookup("origin")
 	checkPanic(err, "Lookup remotes error")
 	checkPanic(

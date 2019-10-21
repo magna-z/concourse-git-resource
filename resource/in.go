@@ -2,6 +2,7 @@ package resource
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -27,6 +28,8 @@ func In(payload *InPayload, path string, printer *common.Printer) {
 		HttpPassword:  payload.Source.Password,
 		SshPrivateKey: payload.Source.PrivateKey,
 	}
+
+	fmt.Fprintln(os.Stderr, fmt.Sprintf("in: workdir=%q, remote=%q", path, params.RemoteUrl))
 
 	var repo *git.Repository
 	repo, err := git.Open(path, payload.Source.Branch, params)

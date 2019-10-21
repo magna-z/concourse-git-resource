@@ -3,6 +3,7 @@ package resource
 import (
 	"fmt"
 	"io/ioutil"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -53,6 +54,8 @@ func Out(payload *OutPayload, workdir string, printer *common.Printer) {
 		panic(fmt.Sprint("Open repository error:", err))
 	}
 	defer repo.Close()
+
+	fmt.Fprintln(os.Stderr, fmt.Sprintf("out: workdir=%q, remote=%q", wd, payload.Source.Url))
 
 	if payload.Params.TagPath != "" && payload.Params.TagMessagePath != "" {
 		tag, err = getFileContent(wd + payload.Params.TagPath)
